@@ -1,0 +1,322 @@
+<html><head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>AWS IO Example</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+
+
+  <script type="text/javascript" src="/js/lib/dummy.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="/css/result-light.css">
+
+
+  <style id="compiled-css" type="text/css">
+      .box {
+  border: solid 1px;
+  padding: 5px;
+  margin: 5px;
+  font-size: 12px;
+  text-align: center;
+  background-color: white;
+}
+
+.box.container {
+  display: inline-block;
+  border: none;
+}
+
+.box.container.parent {
+  display: inline-block;
+  border: solid 1px;
+  border-radius: 10px;
+}
+
+.box.button {
+  font-weight: bold;
+  font-size: 16px;
+  border-radius: 5px;
+}
+
+.box.floating {
+  float: left;
+  margin: 15px;
+  padding: 10px;
+  font-weight: bold;
+  border-radius: 5px;
+}
+
+button.accordion {
+  background-color: #eee;
+  color: #444;
+  cursor: pointer;
+  padding: 18px;
+  width: 100%;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 15px;
+  transition: 0.4s;
+}
+
+button.accordion.active,
+button.accordion:hover {
+  background-color: #ddd;
+}
+
+button.accordion:after {
+  content: '\02795';
+  font-size: 13px;
+  color: #777;
+  float: right;
+  margin-left: 5px;
+}
+
+button.accordion.active:after {
+  content: "\2796";
+}
+
+div.panel {
+  padding: 0 18px;
+  background-color: white;
+  max-height: 0;
+  overflow: hidden;
+  transition: 0.6s ease-in-out;
+  opacity: 0;
+}
+
+div.panel.show {
+  opacity: 1;
+  max-height: 500px;
+}
+
+div.panellast {
+  padding: 0 18px;
+  background-color: white;
+  max-height: 0;
+  transition: 0.6s ease-in-out;
+  opacity: 0;
+  display: inline-block;
+}
+
+div.panellast.show {
+  opacity: 1;
+}
+
+  </style>
+
+  <script type="text/javascript">
+
+
+    window.onload=function(){
+      
+//Configuration settings for S3
+var s3BucketName = '...'; //Bucket name.
+var s3Region = 'ap-northeast-2'; //Region where bucket is hosted.
+var s3Key = '...'; //Security key used for external access.
+var s3Secret = '...'; //Secret used for external access.
+
+
+//------------------------------------
+var currentDir = "";
+//------------------------------------
+
+//Set the key and secret in order to allow access, should be done before instantiating the AWS.S3 object.
+AWS.config.update({
+  accessKeyId: s3Key,
+  secretAccessKey: s3Secret,
+  region: s3Region
+});
+
+function roundToTwo(num) {
+  return +(Math.round(num + "e+2") + "e-2");
+}
+
+function getFileSize(filek) {
+  if (filek > 1024) {
+    filek = Math.round(filek / 1024);
+    if (filek > 1024) {
+      filek = roundToTwo(filek / 1024);
+      return filek + "MB"
+    }
+    return filek + "KB";
+  }
+  return filek + "B";
+}
+
+function getParentFolder(fullpath) {
+  var lastChar = fullpath.substr(-1); // Selects the last character
+  if (lastChar !== '/') { // is not directory
+    var parts = fullpath.split("/");
+    var beforeLast = parts[parts.length - 1];
+    return fullpath.substr(0, fullpath.length - beforeLast.length);
+  } else {
+    return getParentFolder(fullpath.substr(0, fullpath.length - 1));
+  }
+}
+
+function encode(data) {
+  var str = data.reduce(function(a, b) {
+    return a + String.fromCharCode(b)
+  }, '');
+  return btoa(str).replace(/.{76}(?=.)/g, '$&\n');
+}
+
+//The function that our list button generates.
+function listObjs(directory = '') {
+  var startTime = new Date().getTime();
+  currentDir = directory;
+
+  var s3 = new AWS.S3({
+    params: {
+      Bucket: s3BucketName, //Set the bucket name.
+      Delimiter: '/',
+      Prefix: directory,
+      signatureVersion: 'v4'
+    }
+  });
+  var objListing = s3.listObjects(function(error, data) {
+    if (error === null) {
+      var html_keys = '';
+      var html_imgs = '';
+      var html_dirs = '';
+
+      jQuery.each(data.Contents, function(index, obj) {
+        html_keys += '' + (index + ': ' + obj.Key + ' (' + getFileSize(obj.Size) + ')' + '<br />');
+
+        /**/
+
+        var lastChar = obj.Key.substr(-1); // Selects the last character
+        if (lastChar !== '/') { // is not directory
+
+          html_imgs += "<div id='image-preview-" + index + "' class='box floating'><img src='" + "https://s3-" + s3Region + ".amazonaws.com/" + s3BucketName + "/" + obj.Key + "' width='100px' height='100px'/><br />" + obj.Key + " (" + getFileSize(obj.Size) + ")</div>";
+
+
+
+        } else {
+          var prevdir = getParentFolder(directory);
+          //Will show the name of the directory we are inside.
+          html_dirs += "<div class='box floating'><img src='http://image.flaticon.com/icons/png/512/0/340.png' width='100px' height='100px' onClick='listObjs(" + '"' + prevdir + '"' + ")' /><br />Return to '" + prevdir + "'</div>";
+        }
+      });
+      jQuery.each(data.CommonPrefixes, function(index, obj) {
+        html_dirs += "<div class='box floating'><img src='http://findicons.com/files/icons/727/leopard/128/folder.png' width='100px' height='100px' onClick='listObjs(" + '"' + obj.Prefix + '"' + ")' /><br />" + obj.Prefix + "</div>";
+
+      });
+      jQuery("#objKeys").html(html_keys);
+      jQuery("#objImgs").html(html_dirs + html_imgs);
+
+      var timeToLoad = (new Date().getTime() - startTime) / 1000.0;
+      jQuery("#objTiming").html("Loaded listing in " + timeToLoad + " seconds.");
+    } else {
+      console.log(error);
+    }
+  });
+}
+
+function downloadFile(fileKey, index) {
+  var s3 = new AWS.S3({
+    params: {
+      Bucket: s3BucketName, //Set the bucket name.
+    }
+  });
+  s3.getObject({
+    Key: fileKey
+  }, function(err, file) {
+    var imgg = document.createElement('img');
+    imgg.src = URL.createObjectURL(new Blob(file.Body, {
+      type: 'image/png'
+    }));
+    jQuery("#image-preview-" + index).append(imgg);
+  });
+}
+
+function uploadFile() {
+  var s3 = new AWS.S3({
+    params: {
+      Bucket: s3BucketName,
+      Delimiter: '/',
+      Prefix: currentDir
+    }
+  });
+  var file = document.getElementById('fileToUpload').files[0];
+  if (file) {
+    s3.putObject({
+      Key: currentDir + file.name,
+      ContentType: file.type,
+      Body: file,
+      ACL: "public-read"
+    }, function(err, data) {
+      if (data !== null) {
+        //alert("Got it!");
+      } else {
+        alert("Upload failed!");
+      }
+      listObjs(currentDir);
+    });
+  }
+}
+
+
+
+//----------------------------------------------
+
+//Accordion stuff
+
+var acc = document.getElementsByClassName("accordion");
+var i;
+
+for (i = 0; i < acc.length; i++) {
+  acc[i].onclick = function() {
+    this.classList.toggle("active");
+    this.nextElementSibling.classList.toggle("show");
+  }
+}
+
+
+    }
+
+</script>
+
+<script type="text/javascript" src="//code.jquery.com/jquery-3.1.1.js"></script>
+<script type="text/javascript" src="https://blueimp.github.io/JavaScript-Load-Image/js/load-image.all.min.js"></script>
+<script type="text/javascript" src="https://sdk.amazonaws.com/js/aws-sdk-2.7.6.min.js"></script>
+
+</head>
+<body>
+    
+
+
+  
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="googlebot" content="noindex, nofollow">
+  
+
+  
+    <div>
+      <div class="box container parent">
+        <button class="box button" onclick="listObjs()">Load AWS S3 Bucket</button>
+        <div id="objTiming"></div>
+
+        <button class="accordion">S3 Object Key List</button>
+        <div class="panel">
+          <div id="objKeys"></div>
+        </div>
+
+        <button class="accordion">Upload</button>
+        <div class="panel">
+          <input type="file" class="box button" id="fileToUpload">
+          <button class="box button" onclick="uploadFile()">Upload</button>
+          <br> (Uploads to current directory)
+        </div>
+
+        <button class="accordion active">Files</button>
+        <div id="foo" class="panellast show">
+          <div class="box container" id="objImgs"></div>
+        </div>
+      </div>
+    </div>
+
+
+</body></html>
